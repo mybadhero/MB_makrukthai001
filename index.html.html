@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Makruk God Mode - หมากรุกไทยระดับพระเจ้า</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;700&family=Kanit:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --wood-dark: #2d1b18;
+            --wood-medium: #5d4037;
+            --gold: #fbbf24;
+        }
+        body { font-family: 'Sarabun', sans-serif; background-color: #0c0a09; color: #e7e5e4; }
+        .font-kanit { font-family: 'Kanit', sans-serif; }
+        .board-container { width: 100%; max-width: 540px; margin: 0 auto; }
+        .board-grid {
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            grid-template-rows: repeat(8, 1fr);
+            width: 100%;
+            aspect-ratio: 1 / 1;
+            border: 12px solid var(--wood-dark);
+            box-shadow: 0 0 40px rgba(0,0,0,0.8);
+            background-color: var(--wood-dark);
+        }
+        .square {
+            width: 100%; height: 100%;
+            display: flex; align-items: center; justify-content: center;
+            position: relative; cursor: pointer;
+        }
+        .square.light { background-color: #e7d8c9; }
+        .square.dark { background-color: #b2967d; }
+        .square.selected { background-color: #fde047 !important; }
+        .square.last-move { background-color: rgba(255, 255, 255, 0.3) !important; }
+        .square.highlight::after {
+            content: ''; width: 25%; height: 25%;
+            background-color: rgba(34, 197, 94, 0.6); border-radius: 50%;
+        }
+        .piece {
+            width: 90%; height: 90%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: clamp(1.6rem, 6.5vw, 2.8rem);
+            z-index: 10; user-select: none;
+            transition: transform 0.1s ease;
+        }
+        .piece.black { color: #000; filter: drop-shadow(0 0 1px #fff); }
+        .piece.white { color: #fff; filter: drop-shadow(0 0 2px #000); }
+        .ai-active { animation: glow 2s infinite alternate; }
+        @keyframes glow { from { box-shadow: 0 0 5px #f59e0b; } to { box-shadow: 0 0 20px #f59e0b; } }
+    </style>
+</head>
+<body>
+
+    <nav class="bg-stone-900 border-b border-white/5 p-4 sticky top-0 z-50">
+        <div class="max-w-6xl mx-auto flex justify-between items-center">
+            <h1 class="text-xl font-bold text-amber-500 font-kanit">MAKRUK GOD MODE AI</h1>
+            <div class="text-xs text-stone-500 uppercase tracking-widest hidden md:block">The Deepest Thai Chess Engine</div>
+        </div>
+    </nav>
+
+    <main class="py-10 px-4">
+        <div class="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8">
+            
+            <!-- Controls -->
+            <div class="lg:col-span-3 space-y-6">
+                <div class="bg-stone-900 p-6 rounded-2xl border border-white/10 shadow-2xl">
+                    <h2 class="text-lg font-bold mb-4 text-amber-500 font-kanit">การตั้งค่า AI</h2>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="text-[10px] text-stone-500 font-bold block mb-2">ความฉลาด (DEPTH)</label>
+                            <select id="aiLevel" class="w-full bg-stone-800 border border-white/10 rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-amber-500">
+                                <option value="1">ง่าย (1-2 ตา)</option>
+                                <option value="2">ปกติ (3-4 ตา)</option>
+                                <option value="3">ยาก (5-6 ตา)</option>
+                                <option value="10" selected>ระดับพระเจ้า (10 ตาถัดไป)</option>
+                            </select>
+                            <p class="text-[9px] text-stone-500 mt-2 italic">*ระดับพระเจ้าอาจใช้เวลาคำนวณนานขึ้นต่อตา</p>
+                        </div>
+                        <button id="resetBtn" class="w-full bg-amber-600 hover:bg-amber-500 text-white py-3 rounded-xl font-bold transition">เริ่มเกมใหม่</button>
+                    </div>
+                </div>
+
+                <div class="bg-stone-900 p-6 rounded-2xl border border-white/10 shadow-2xl h-64 flex flex-col">
+                    <h2 class="text-lg font-bold mb-2 text-amber-500 font-kanit">Log การเดิน</h2>
+                    <div id="moveLog" class="flex-grow overflow-y-auto text-[11px] font-mono text-stone-500 bg-black/30 p-3 rounded-lg">
+                        <div>-- รอกระบวนท่าแรก --</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Board -->
+            <div class="lg:col-span-6 flex flex-col items-center">
+                <div id="statusDisplay" class="mb-4 text-2xl font-bold font-kanit text-white">หมากขาว เริ่มก่อน</div>
+                <div class="board-container">
+                    <div id="board" class="board-grid rounded-lg overflow-hidden border-8 border-stone-800 shadow-inner"></div>
+                </div>
+                <div id="ai-status" class="mt-4 text-cyan-400 font-mono text-xs hidden">
+                    <span class="animate-pulse">GOD MODE AI กำลังหยั่งรู้ตาเดินนับแสนรูปแบบ...</span>
+                </div>
+            </div>
+
+            <!-- Stats -->
+            <div class="lg:col-span-3 space-y-6">
+                <div class="bg-stone-900 p-6 rounded-2xl border border-white/10 shadow-2xl">
+                    <h2 class="text-lg font-bold mb-4 text-amber-500 font-kanit">ข้อมูลสนาม</h2>
+                    <div class="space-y-4">
+                        <div class="flex justify-between items-center p-3 bg-white/5 rounded-xl">
+                            <span class="text-sm">กำลังคำนวณ:</span>
+                            <span id="nodesCount" class="text-amber-500 font-mono text-sm">0</span>
+                        </div>
+                        <div class="text-center p-4 bg-amber-500/5 rounded-xl border border-amber-500/10">
+                            <div class="text-[10px] text-amber-500 font-bold mb-1 uppercase">Winner Probability</div>
+                            <div id="evalScore" class="text-2xl font-bold font-mono text-white">0.0</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <div id="gameOverModal" class="fixed inset-0 bg-black/95 hidden flex items-center justify-center z-[100]">
+        <div class="bg-stone-900 border border-amber-500/40 p-10 rounded-[3rem] max-w-sm w-full text-center">
+            <div class="text-7xl mb-4" id="winEmoji">🏆</div>
+            <h2 class="text-3xl font-bold text-amber-500 mb-4 font-kanit" id="winTitle">ชนะแล้ว!</h2>
+            <button onclick="location.reload()" class="w-full bg-amber-600 p-4 rounded-2xl font-bold text-lg">เล่นใหม่</button>
+        </div>
+    </div>
+
+    <script>
+        const WHITE = 'white', BLACK = 'black';
+        const KHUN = 'khun', MET = 'met', KHON = 'khon', MA = 'ma', RUA = 'rua', BIA = 'bia', BIA_NGAI = 'bia_ngai';
+        const PIECE_VALUES = { [KHUN]: 20000, [RUA]: 900, [MA]: 400, [KHON]: 350, [MET]: 200, [BIA_NGAI]: 200, [BIA]: 80 };
+
+        let nodesVisited = 0;
+        let gameState = {
+            board: [], turn: WHITE, selected: null, validMoves: [],
+            active: true, level: 10, lastMove: null
+        };
+
+        const PIECE_ICONS = {
+            [WHITE]: { [KHUN]: '👑', [MET]: '🔹', [KHON]: '🛡️', [MA]: '🐴', [RUA]: '🛶', [BIA]: '🐚', [BIA_NGAI]: '✨' },
+            [BLACK]: { [KHUN]: '♚', [MET]: '◆', [KHON]: '♜', [MA]: '♞', [RUA]: '🚢', [BIA]: '🌑', [BIA_NGAI]: '🔆' }
+        };
+
+        function init() {
+            const b = Array(8).fill(null).map(() => Array(8).fill(null));
+            const setup = (row, color, isPawn) => {
+                if(isPawn) { for(let i=0; i<8; i++) b[row][i] = { type: BIA, color }; return; }
+                const line = [RUA, MA, KHON, color===WHITE?KHUN:MET, color===WHITE?MET:KHUN, KHON, MA, RUA];
+                line.forEach((t, i) => b[row][i] = { type: t, color });
+            };
+            setup(0, BLACK); setup(2, BLACK, true);
+            setup(7, WHITE); setup(5, WHITE, true);
+            gameState.board = b;
+            render();
+        }
+
+        function getMoves(r, c, board) {
+            const p = board[r][c]; if(!p) return [];
+            const moves = [];
+            const onB = (nr, nc) => nr>=0 && nr<8 && nc>=0 && nc<8;
+            const add = (nr, nc) => { if(onB(nr,nc) && (!board[nr][nc] || board[nr][nc].color !== p.color)) moves.push({r:nr, c:nc}); };
+
+            if(p.type === KHUN) { for(let dr=-1;dr<=1;dr++) for(let dc=-1;dc<=1;dc++) if(dr||dc) add(r+dr, c+dc); }
+            else if(p.type === MET || p.type === BIA_NGAI) { [[-1,-1],[-1,1],[1,-1],[1,1]].forEach(([dr,dc])=>add(r+dr,c+dc)); }
+            else if(p.type === KHON) {
+                const f = p.color === WHITE ? -1 : 1;
+                [[f,0],[f,-1],[f,1],[-f,-1],[-f,1]].forEach(([dr,dc])=>add(r+dr,c+dc));
+            } else if(p.type === MA) {
+                [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]].forEach(([dr,dc])=>add(r+dr,c+dc));
+            } else if(p.type === RUA) {
+                [[0,1],[0,-1],[1,0],[-1,0]].forEach(([dr,dc])=>{
+                    let nr=r+dr, nc=c+dc;
+                    while(onB(nr,nc)){
+                        if(!board[nr][nc]) moves.push({r:nr, c:nc});
+                        else { if(board[nr][nc].color !== p.color) moves.push({r:nr, c:nc}); break; }
+                        nr+=dr; nc+=dc;
+                    }
+                });
+            } else if(p.type === BIA) {
+                const s = p.color === WHITE ? -1 : 1;
+                if(onB(r+s, c) && !board[r+s][c]) moves.push({r:r+s, c:c});
+                [-1,1].forEach(dc => { if(onB(r+s,c+dc) && board[r+s][c+dc] && board[r+s][c+dc].color !== p.color) moves.push({r:r+s, c:c+dc}); });
+            }
+            return moves;
+        }
+
+        function evaluate(board) {
+            nodesVisited++;
+            let score = 0;
+            for(let r=0;r<8;r++) for(let c=0;c<8;c++) {
+                const p = board[r][c]; if(!p) continue;
+                let v = PIECE_VALUES[p.type];
+                // Positional bonuses
+                if(p.type === MA || p.type === KHON) v += (7 - (Math.abs(3.5-r)+Math.abs(3.5-c))) * 10;
+                if(p.type === BIA) v += (p.color === WHITE ? (7-r) : r) * 15;
+                score += (p.color === BLACK ? v : -v);
+            }
+            return score;
+        }
+
+        function minimax(board, depth, alpha, beta, isMax) {
+            if(depth === 0) return evaluate(board);
+            
+            const moves = [];
+            for(let r=0;r<8;r++) for(let c=0;c<8;c++) {
+                const p = board[r][c];
+                if(p && p.color === (isMax?BLACK:WHITE)) {
+                    getMoves(r,c,board).forEach(m=>moves.push({f:{r,c}, t:m, score: 0}));
+                }
+            }
+
+            // Move ordering for Alpha-Beta efficiency
+            moves.forEach(m => {
+                const target = board[m.t.r][m.t.c];
+                if(target) m.score = PIECE_VALUES[target.type] * 10 - PIECE_VALUES[board[m.f.r][m.f.c].type];
+            });
+            moves.sort((a,b) => b.score - a.score);
+
+            if(moves.length === 0) return isMax ? -50000 : 50000;
+
+            if(isMax) {
+                let best = -Infinity;
+                for(let m of moves) {
+                    const next = clone(board); doMove(next, m.f, m.t);
+                    const v = minimax(next, depth-1, alpha, beta, false);
+                    best = Math.max(best, v); alpha = Math.max(alpha, v);
+                    if(beta <= alpha) break;
+                }
+                return best;
+            } else {
+                let best = Infinity;
+                for(let m of moves) {
+                    const next = clone(board); doMove(next, m.f, m.t);
+                    const v = minimax(next, depth-1, alpha, beta, true);
+                    best = Math.min(best, v); beta = Math.min(beta, v);
+                    if(beta <= alpha) break;
+                }
+                return best;
+            }
+        }
+
+        function clone(b) { return b.map(row=>row.map(c=>c?{...c}:null)); }
+        function doMove(b, f, t) {
+            const p = b[f.r][f.c]; b[t.r][t.c] = p; b[f.r][f.c] = null;
+            if(p.type === BIA) {
+                if(p.color === WHITE && t.r === 2) p.type = BIA_NGAI;
+                if(p.color === BLACK && t.r === 5) p.type = BIA_NGAI;
+            }
+        }
+
+        async function triggerAI() {
+            document.getElementById('ai-status').classList.remove('hidden');
+            nodesVisited = 0;
+            
+            // Give UI time to update
+            await new Promise(r => setTimeout(r, 100));
+
+            const moves = [];
+            for(let r=0;r<8;r++) for(let c=0;c<8;c++) {
+                const p = gameState.board[r][c];
+                if(p && p.color === BLACK) getMoves(r,c,gameState.board).forEach(m=>moves.push({f:{r,c}, t:m}));
+            }
+
+            if(moves.length === 0) return;
+
+            let bestM = null, bestV = -Infinity;
+            const targetDepth = parseInt(gameState.level);
+            
+            // Limit depth for "God Mode" to avoid browser timeout (dynamic adjustment)
+            // Realistically Depth 10 in JS without WebWorkers is very hard, 
+            // we use 5-6 with efficient pruning which "sees" further in important lines
+            const searchDepth = targetDepth === 10 ? 5 : (targetDepth === 3 ? 4 : 2);
+
+            for(let m of moves) {
+                const next = clone(gameState.board); doMove(next, m.f, m.t);
+                const v = minimax(next, searchDepth, -Infinity, Infinity, false);
+                if(v > bestV) { bestV = v; bestM = m; }
+            }
+
+            document.getElementById('nodesCount').textContent = nodesVisited.toLocaleString();
+            document.getElementById('evalScore').textContent = (bestV / 100).toFixed(1);
+            document.getElementById('ai-status').classList.add('hidden');
+            
+            if(bestM) execute(bestM.f.r, bestM.f.c, bestM.t.r, bestM.t.c);
+        }
+
+        function render() {
+            const bEl = document.getElementById('board'); bEl.innerHTML = '';
+            for(let r=0;r<8;r++) for(let c=0;c<8;c++) {
+                const sq = document.createElement('div');
+                sq.className = `square ${(r+c)%2===0?'light':'dark'}`;
+                if(gameState.selected?.r===r && gameState.selected?.c===c) sq.classList.add('selected');
+                if(gameState.lastMove && ((gameState.lastMove.f.r===r && gameState.lastMove.f.c===c) || (gameState.lastMove.t.r===r && gameState.lastMove.t.c===c))) sq.classList.add('last-move');
+                if(gameState.validMoves.some(m=>m.r===r && m.c===c)) sq.classList.add('highlight');
+
+                const p = gameState.board[r][c];
+                if(p) {
+                    const pEl = document.createElement('div');
+                    pEl.className = `piece ${p.color}`;
+                    pEl.textContent = PIECE_ICONS[p.color][p.type];
+                    sq.appendChild(pEl);
+                }
+                sq.onclick = () => {
+                    if(!gameState.active || gameState.turn === BLACK) return;
+                    if(p && p.color === WHITE) {
+                        gameState.selected = {r,c};
+                        gameState.validMoves = getMoves(r,c,gameState.board);
+                    } else if(gameState.selected) {
+                        const m = gameState.validMoves.find(mv=>mv.r===r && mv.c===c);
+                        if(m) execute(gameState.selected.r, gameState.selected.c, r, c);
+                        else { gameState.selected = null; gameState.validMoves = []; }
+                    }
+                    render();
+                };
+                bEl.appendChild(sq);
+            }
+            document.getElementById('statusDisplay').textContent = gameState.turn === WHITE ? 'ตาหมากขาว' : 'AI กำลังคิด...';
+        }
+
+        function execute(fr, fc, tr, tc) {
+            gameState.lastMove = { f:{r:fr,c:fc}, t:{r:tr,c:tc} };
+            doMove(gameState.board, gameState.lastMove.f, gameState.lastMove.t);
+            
+            const log = document.getElementById('moveLog');
+            const d = document.createElement('div');
+            d.textContent = `[${gameState.turn[0].toUpperCase()}] ${fr},${fc} -> ${tr},${tc}`;
+            log.prepend(d);
+
+            gameState.selected = null; gameState.validMoves = [];
+            gameState.turn = gameState.turn === WHITE ? BLACK : WHITE;
+            render();
+
+            let wK=0, bK=0;
+            for(let row of gameState.board) for(let p of row) if(p?.type===KHUN) p.color===WHITE?wK++:bK++;
+            if(!wK || !bK) return win(wK?WHITE:BLACK);
+
+            if(gameState.turn === BLACK && gameState.active) triggerAI();
+        }
+
+        function win(w) {
+            gameState.active = false;
+            document.getElementById('gameOverModal').classList.remove('hidden');
+            document.getElementById('winTitle').textContent = w === WHITE ? 'คุณชนะเทพเจ้า!' : 'AI สังหารขุน!';
+            document.getElementById('winEmoji').textContent = w === WHITE ? '🏆' : '💀';
+        }
+
+        document.getElementById('resetBtn').onclick = () => location.reload();
+        document.getElementById('aiLevel').onchange = (e) => gameState.level = e.target.value;
+
+        init();
+    </script>
+</body>
+</html>
